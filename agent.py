@@ -1,4 +1,5 @@
 import os
+import argparse
 from typing import TypedDict, Optional, List
 from langgraph.graph import StateGraph, END
 from llm import llm, clasificador, SYSTEM_PROMPT
@@ -140,21 +141,38 @@ CASOS_DE_PRUEBA = [
                          "seguimos viendo datos de la semana pasada.",
          categoria_esp="Datos y reportes", severidad_esp="Alta", equipo_esp="Datos"),
 
-    dict(id="T3", texto="¿Podrían agregar la opción de exportar las tareas a PDF, "
-                         "además de Excel?",
+    dict(id="T3", texto="El tablero tarda unos 8 segundos en cargar, antes era casi "
+                    "instantáneo. Sigue funcionando, solo más lento.",
+        categoria_esp="Rendimiento", severidad_esp="Media", equipo_esp="Plataforma"),
+    dict(id="T4", texto="¿Podrían agregar la opción de exportar las tareas a PDF, "
+                    "además de Excel?",
          categoria_esp="Interfaz / uso", severidad_esp="Baja", equipo_esp="Producto"),
-    dict(id="T4", texto="La integración con Slack dejó de enviar notificaciones desde "
+    dict(id="T5", texto="La integración con Slack dejó de enviar notificaciones desde "
                          "ayer, ya no recibimos nada en el canal.",
          categoria_esp="Integraciones", severidad_esp="Alta", equipo_esp="Integraciones"),
+    dict(id="T6", texto="¿Ustedes también hacen la facturación de mi empresa ante la DIAN?",
+        categoria_esp="Fuera de alcance", severidad_esp="Fuera de alcance",
+        equipo_esp="Ninguno (redirigir)"),
 ]
 
-def correr_casos_de_prueba(incluir_borrador: bool = False):
+def correr_casos_de_prueba(
+    incluir_borrador: bool = False,
+    caso_id: Optional[str] = None,
+    interactivo: bool = False,
+):
     if not os.environ.get("GOOGLE_API_KEY"):
         raise SystemExit("Falta GOOGLE_API_KEY en el entorno.")
 
     app = build_graph(incluir_borrador=incluir_borrador)
     resultados = []
-    for caso in CASOS_DE_PRUEBA:
+    casos = CASOS_DE_PRUEBA
+    if caso_id:
+        casos = [caso for caso in CASOS_DE_PRUEBA if caso["id"].lower() == caso_id.lower()]
+        if not casos:
+            ids_disponibles = ", ".join(caso["id"] for caso in CASOS_DE_PRUEBA)
+            raise SystemExit(f"Caso desconocido: {caso_id}. Usa uno de: {ids_disponibles}")
+
+    for caso in casos:
         estado_inicial: TicketState = {
             "ticket_text": caso["texto"], "categoria": None, "severidad": None,
             "fuera_de_alcance": False, "equipo": None, "sla_respuesta": None,
@@ -172,8 +190,13 @@ def correr_casos_de_prueba(incluir_borrador: bool = False):
         print(f"obtenido: {salida['categoria']} / {salida['severidad']} / {salida['equipo']}")
         print(f"SLA: respuesta={salida['sla_respuesta']} resolucion={salida['sla_resolucion']}")
         print("PASA" if resultados[-1]["pasa"] else "FALLA")
+        if salida["borrador_respuesta"]:
+            print(f"respuesta generada: {salida['borrador_respuesta']}")
         for linea in salida["trace"]:
             print("  ", linea)
+
+        if interactivo and caso != casos[-1]:
+            input("\nPresiona Enter para avanzar al siguiente caso...")
 
     n_ok = sum(r["pasa"] for r in resultados)
     print(f"\n=== {n_ok}/{len(resultados)} casos correctos ===")
@@ -181,5 +204,19 @@ def correr_casos_de_prueba(incluir_borrador: bool = False):
 
 
 if __name__ == "__main__":
-    # Cambia a True si les sobra tiempo para el borrador de respuesta (opcional
-    correr_casos_de_prueba(incluir_borrador=True)
+    parser = argparse.ArgumentParser(description="Ejecuta los casos de triage de Aurora.")
+    parser.add_argument("caso", nargs="?", help="Caso individual: T1, T2, T3, T4, T5 o T6")
+    parser.add_argument(
+        "--borrador", action="store_true",
+        help="Genera también un borrador de respuesta para el cliente",
+    )
+    parser.add_argument(
+        "--interactivo", action="store_true",
+        help="Espera Enter antes de mostrar cada caso siguiente",
+    )
+    args = parser.parse_args()
+    correr_casos_de_prueba(
+        incluir_borrador=args.borrador,
+        caso_id=args.caso,
+        interactivo=args.interactivo,
+    )

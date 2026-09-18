@@ -55,6 +55,22 @@ Al terminar, se muestra el resultado de cada caso y un resumen similar a:
 
 Cada caso imprime también su categoría, severidad, equipo, SLA y trazabilidad del grafo.
 
+### Ejecutar los casos uno por uno
+
+Para mostrar la respuesta generada y avanzar con `Enter` entre casos:
+
+```powershell
+python agent.py --interactivo --borrador
+```
+
+También puedes ejecutar un caso individual:
+
+```powershell
+python agent.py T1 --borrador
+```
+
+Casos disponibles: `T1`, `T2`, `T3`, `T4`, `T5` y `T6`.
+
 ## Generar borradores de respuesta
 
 La generación de un borrador para el cliente es opcional. En `agent.py`, cambia:
@@ -85,7 +101,46 @@ python agent.py
 
 Los casos fuera de alcance se redirigen y reciben el SLA `Redirigir / No aplica`.
 
+## Interpretar los resultados
+
+En la salida de cada caso:
+
+- `esperado`: categoría, severidad y equipo definidos por el reto.
+- `obtenido`: clasificación devuelta por Gemini.
+- `PASA`: los tres valores obtenidos coinciden con los esperados.
+- `FALLA`: al menos uno de los tres valores no coincide.
+- `SLA`: tiempo máximo de respuesta y de resolución según la severidad.
+- `[LLM]`: decisión de Gemini y su justificación.
+- `[lookup Tabla 1]`: equipo asignado a partir de la categoría.
+- `[lookup Tabla 2]`: SLA asignado a partir de la severidad.
+- `[regla]`: regla aplicada por el grafo, por ejemplo, la redirección de un ticket fuera de alcance.
+- `respuesta generada`: borrador de respuesta al cliente, visible cuando se usa `--borrador`.
+
+Por ejemplo, si aparece:
+
+```text
+esperado: Acceso y cuentas / Crítica / Identity
+obtenido: Acceso y cuentas / Crítica / Identity
+PASA
+```
+
+significa que el ticket fue clasificado correctamente, asignado al equipo `Identity` y recibió el SLA de severidad crítica: respuesta en 1 hora y resolución en 4 horas.
+
+Si `esperado` y `obtenido` son diferentes, el caso queda como `FALLA`. Esto no significa necesariamente que Gemini no responda; significa que su decisión no coincide con la etiqueta definida por el reto.
+
 ## Problemas frecuentes
+
+### Resultado observado
+
+En una ejecución de prueba:
+
+- `T1`: pasa. Categoría `Acceso y cuentas`, severidad `Crítica`, equipo `Identity`.
+- `T2`: pasa. Categoría `Datos y reportes`, severidad `Alta`, equipo `Datos`.
+- `T3`: pasa. Categoría `Rendimiento`, severidad `Media`, equipo `Plataforma`.
+- `T4`: falla porque Gemini devolvió `Datos y reportes`, pero el resultado esperado es `Interfaz / uso`, equipo `Producto`.
+
+El caso `T4` es una solicitud de nueva funcionalidad. Si se necesita garantizar exactamente la etiqueta del reto, conviene agregar una regla explícita al prompt para que las solicitudes de exportación o mejora de uso se clasifiquen como `Interfaz / uso`.
+
 
 ### Error `503 UNAVAILABLE`
 
